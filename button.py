@@ -5,7 +5,7 @@ class Button:
     def __init__(
         self,
         pin_num: int,
-        debounce_ms = 30,
+        debounce_ms = 60,
         pull: str = "up",
         multi_click_timeout: int = 100
         ):
@@ -56,14 +56,17 @@ class Button:
         
         self._pressed_event = self._released_event = False
 
+        self._scheduled = False
+
         # Multi-click
         self._multi_click_timeout = multi_click_timeout
         self._multi_click_count = self._multi_click_helper = 0
         self._multi_click_finalized = True
+        self._multi_click_deadline = time.ticks_add(now, self._multi_click_timeout)
 
         self.pin.irq(
             trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING,
-            handler=lambda _: micropython.schedule(self._irq_handler, 0)
+            handler=self._irq_handler
         )
     
     def _read_value(self):
@@ -83,82 +86,31 @@ class Button:
         value = self.pin.value()
         return value == self._active_on
 
-    def _irq_handler(self, _):
-        """
-        Interrupt handler for GPIO state changes.
-
-        Parameters
-        ----------
-        _ : Any
-            Unused argument required by `micropython.schedule`.
-
-        Notes
-        -----
-        Applies debounce filtering and updates internal state. Press and release
-        events are recorded, and multi-click tracking is updated when applicable.
-        """
+    def _irq_handler(self,_):
         now = time.ticks_ms()
         new_state = self._read_value()
-
-        # Ignore if still in debounce window
-        if time.ticks_diff(now, self._last_change) < self._debounce_ms:
+        if time.ticks_diff(now, self._last_change)<self._debounce_ms or new_state==self._state:
             return
 
-        if new_state != self._state:
-            self._state = new_state
-            self._last_change = now
+        self._state = new_state
+        self._last_change = now
 
-            if self._state:
-                self._pressed_event = True
-                self._last_press = now
+        if self._state:
+            self._pressed_event = True
+            self._last_press = now
 
+            if time.ticks_diff(now,self._multi_click_deadline)<=0:
                 self._multi_click_helper += 1
-                if self._multi_click_finalized:
-                    self._multi_click_initialize()
             else:
-                self._released_event = True
-                self._last_release = now
-    
-    # Multi-click logic
-    def _multi_click_initialize(self):
-        """
-        Begin a multi-click detection window.
-
-        Notes
-        -----
-        Schedules `_multi_click_handler` to determine when the click
-        sequence has completed.
-        """
-        self._multi_click_finalized = False
-        micropython.schedule(self._multi_click_handler,0)
-    
-    def _multi_click_handler(self, _):
-        """
-        Finalize multi-click detection after timeout.
-
-        Parameters
-        ----------
-        _ : Any
-            Unused argument required by `micropython.schedule`.
-
-        Notes
-        -----
-        Once no new press is detected within the configured timeout,
-        the accumulated click count is finalized and made available
-        through `multi_click_count`.
-        """
-        now = time.ticks_ms()
-
-        if time.ticks_diff(now, self._last_press)<self._multi_click_timeout:
-            micropython.schedule(self._multi_click_handler, 0)
-            return
-        
-        self._multi_click_count = self._multi_click_helper
-        self._multi_click_helper = 0
-        self._multi_click_finalized = True
+                self._multi_click_count = self._multi_click_helper
+                self._multi_click_helper = 1
+            
+        else:
+            self._released_event = True
+            self._last_release = now
+            self._multi_click_deadline = time.ticks_add(now, self._multi_click_timeout)
 
     # Public API
-    @property
     def is_pressed(self) -> bool:
         """
         Current logical state of the button.
@@ -226,20 +178,12 @@ class Button:
     
     @property
     def multi_click_count(self) -> int:
-        """
-        Number of clicks detected in the last completed sequence.
-
-        Returns
-        -------
-        int
-            Number of consecutive presses detected within the configured
-            multi-click timeout window. Returns 0 if no completed sequence
-            is available.
-
-        Notes
-        -----
-        Reading this property resets the stored click count to zero.
-        """
         count = self._multi_click_count
         self._multi_click_count = 0
         return count
+
+led = Pin(15, Pin.OUT)
+button = Button(12,multi_click_timeout=400)
+while True:
+    if (count:=button.multi_click_count)>0:
+        print(count)
