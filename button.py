@@ -1,16 +1,18 @@
 import time, micropython
-from machine import Pin
+from machine import Pin, Timer
 
 class Button:
     def __init__(
         self,
         pin_num: int,
-        debounce_ms = 60,
+        debounce_ms = 30,
         pull: str = "up",
-        multi_click_timeout: int = 100
+        multi_click_timeout: int = 200
         ):
         """
-        Initialize a debounced GPIO button with optional multi-click detection.
+        Initialize a debounced GPIO button.
+        Default parameters are set for an active-low button,
+        so if yours isn't then remember to change them ig
 
         Parameters
         ----------
@@ -24,20 +26,16 @@ class Button:
             idle state and active polarity of the button. Default is "up".
         multi_click_timeout : int, optional
             Maximum time interval in milliseconds between consecutive presses
-            to be considered part of the same multi-click sequence. Default is 100.
+            to be considered part of the same multi-click sequence. Default is 200.
 
         Raises
         ------
         ValueError
             If `pull` is not one of {"up", "down"}.
-
-        Notes
-        -----
-        The button uses interrupt-based detection and schedules handlers using
-        `micropython.schedule` to ensure safe execution outside IRQ context.
         """
         now = time.ticks_ms()
 
+        # Setting up the pin
         pull = pull.lower()
         if pull not in ("up","down"):
             raise ValueError("pull must be either up or down")
@@ -49,27 +47,24 @@ class Button:
             self._active_on = True
         
         self.pin = Pin(pin_num, Pin.IN, pull_val)
-        self._debounce_ms = debounce_ms
-
-        self._state = self._read_value()
-        self._last_change = self._last_press = self._last_release = now
-        
-        self._pressed_event = self._released_event = False
-
-        self._scheduled = False
-
-        # Multi-click
-        self._multi_click_timeout = multi_click_timeout
-        self._multi_click_count = self._multi_click_helper = 0
-        self._multi_click_finalized = True
-        self._multi_click_deadline = time.ticks_add(now, self._multi_click_timeout)
-
         self.pin.irq(
             trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING,
             handler=self._irq_handler
         )
+
+        # Setting up attributes
+        self._debounce_ms = debounce_ms
+        self._state = self._read_value()
+        self._last_change = self._last_press = self._last_release = now
+        self._pressed_event = self._released_event = False
+
+        self._multi_click_timeout = multi_click_timeout
+        self._multi_click_count = self._multi_click_helper = 0
+        self._multi_click_timer = Timer(-1)
+
+        micropython.alloc_emergency_exception_buf(100)
     
-    def _read_value(self):
+    def _read_value(self) -> bool:
         """
         Read the logical button state.
 
@@ -80,13 +75,20 @@ class Button:
 
         Notes
         -----
-        The returned value accounts for the configured pull direction and
-        active polarity.
+        The returned value accounts for the configured pull direction.
         """
         value = self.pin.value()
         return value == self._active_on
 
-    def _irq_handler(self,_):
+    def _irq_handler(self,_: Pin):
+        """
+        Irq handler for the button.
+
+        Parameters
+        ----------
+        _ : Pin
+            Throwaway parameter required by `Pin.irq`, equal to the button's pin.
+        """
         now = time.ticks_ms()
         new_state = self._read_value()
         if time.ticks_diff(now, self._last_change)<self._debounce_ms or new_state==self._state:
@@ -99,16 +101,24 @@ class Button:
             self._pressed_event = True
             self._last_press = now
 
-            if time.ticks_diff(now,self._multi_click_deadline)<=0:
-                self._multi_click_helper += 1
-            else:
-                self._multi_click_count = self._multi_click_helper
-                self._multi_click_helper = 1
-            
+            self._multi_click_timer.deinit()
+            self._multi_click_helper += 1
         else:
             self._released_event = True
             self._last_release = now
-            self._multi_click_deadline = time.ticks_add(now, self._multi_click_timeout)
+            self._multi_click_timer.init(mode = Timer.ONE_SHOT, period=self._multi_click_timeout, callback=self._multi_click_timer_func)
+
+    def _multi_click_timer_func(self,_: Timer):
+        """
+        `_multi_click_timer`'s callback function.
+
+        Parameters
+        ----------
+        _ : Timer
+            Throwaway parameter required by `Timer.init`, equal to the timer object.
+        """
+        self._multi_click_count = self._multi_click_helper
+        self._multi_click_helper = 0
 
     # Public API
     def is_pressed(self) -> bool:
@@ -161,7 +171,7 @@ class Button:
         return False
     
     @property
-    def held_time(self):
+    def hold_time(self) -> int:
         """
         Duration the button has been held.
 
@@ -182,8 +192,12 @@ class Button:
         self._multi_click_count = 0
         return count
 
-led = Pin(15, Pin.OUT)
-button = Button(12,multi_click_timeout=400)
-while True:
-    if (count:=button.multi_click_count)>0:
-        print(count)
+# Test code
+if __name__ == "__main__":
+    led = Pin(15, Pin.OUT)
+    button = Button(12)
+    while True:
+        if button.was_pressed():
+            led.value(not led.value())
+        if (count:=button.multi_click_count)>0:
+            print(count)
