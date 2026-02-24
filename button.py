@@ -191,13 +191,3 @@ class Button:
         count = self._multi_click_count
         self._multi_click_count = 0
         return count
-
-# Test code
-if __name__ == "__main__":
-    led = Pin(15, Pin.OUT)
-    button = Button(12)
-    while True:
-        if button.was_pressed():
-            led.value(not led.value())
-        if (count:=button.multi_click_count)>0:
-            print(count)
