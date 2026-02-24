@@ -1,13 +1,22 @@
 import time, micropython
 from machine import Pin, Timer
 
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from typing import Callable
+
 class Button:
     def __init__(
         self,
         pin_num: int,
         debounce_ms = 30,
         pull: str = "up",
-        multi_click_timeout: int = 200
+        multi_click_timeout: int = 200,
+        custom_callback: Callable[[bool],None] | None = None
         ):
         """
         Initialize a debounced GPIO button.
@@ -27,12 +36,18 @@ class Button:
         multi_click_timeout : int, optional
             Maximum time interval in milliseconds between consecutive presses
             to be considered part of the same multi-click sequence. Default is 200.
+        custom_callback : Callable[[bool],None] | None
+            A function that'll be run immediately after the normal interrupt ends,
+            requires a bool parameter for the state of the button. Default is None.
 
         Raises
         ------
         ValueError
             If `pull` is not one of {"up", "down"}.
+        ValueError
+            If `custom_callback` isn't either `None` or `Callable`
         """
+        
         now = time.ticks_ms()
 
         # Setting up the pin
@@ -51,6 +66,11 @@ class Button:
             trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING,
             handler=self._irq_handler
         )
+
+        if callable(custom_callback) or custom_callback is None:
+            self._custom_callback = custom_callback
+        else:
+            raise ValueError("custom_callback must either be a function with a single argument (state) or be empty")
 
         # Setting up attributes
         self._debounce_ms = debounce_ms
@@ -107,6 +127,9 @@ class Button:
             self._released_event = True
             self._last_release = now
             self._multi_click_timer.init(mode = Timer.ONE_SHOT, period=self._multi_click_timeout, callback=self._multi_click_timer_func)
+
+        if self._custom_callback:
+            self._custom_callback(new_state)
 
     def _multi_click_timer_func(self,_: Timer):
         """
