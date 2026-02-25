@@ -10,6 +10,12 @@ It includes:
 * Multi-click detection
 * Custom callback function
 
+## Table of Contents
+
+* [Installation](#installation)
+* [Usage](#usage)
+* [Documentation](#documentation)
+
 ## Installation
 
 There are 2 main ways of installing the library
