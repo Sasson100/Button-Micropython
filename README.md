@@ -10,6 +10,10 @@ It includes:
 * Multi-click detection
 * Custom callback function
 
+Boards tested on:
+
+* ESP32
+
 ## Table of Contents
 
 * [Installation](#installation)
