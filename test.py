@@ -18,5 +18,5 @@ while True:
     if button.was_pressed():
         led.value(not led.value())
         print("Press count:",counter)
-    if (count:=button.multi_click_count)>0:
+    if (count:=button.multi_click_final)>0:
         print("Multi-click count:",count)

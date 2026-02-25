@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class Button:
     def __init__(
         self,
-        pin_num: int,
+        pin_id: int,
         debounce_ms = 30,
         pull: str = "up",
         multi_click_timeout: int = 200,
@@ -25,7 +25,7 @@ class Button:
 
         Parameters
         ----------
-        pin_num : int
+        pin_id : int
             GPIO pin number connected to the button.
         debounce_ms : int, optional
             Debounce interval in milliseconds. State changes occurring within
@@ -61,7 +61,7 @@ class Button:
             pull_val = Pin.PULL_DOWN
             self._active_on = True
         
-        self.pin = Pin(pin_num, Pin.IN, pull_val)
+        self.pin = Pin(pin_id, Pin.IN, pull_val)
         self.pin.irq(
             trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING,
             handler=self._irq_handler
@@ -79,7 +79,7 @@ class Button:
         self._pressed_event = self._released_event = False
 
         self._multi_click_timeout = multi_click_timeout
-        self._multi_click_count = self._multi_click_helper = 0
+        self._multi_click_final = self._multi_click_count = 0
         self._multi_click_timer = Timer(-1)
 
         micropython.alloc_emergency_exception_buf(100)
@@ -122,7 +122,7 @@ class Button:
             self._last_press = now
 
             self._multi_click_timer.deinit()
-            self._multi_click_helper += 1
+            self._multi_click_count += 1
         else:
             self._released_event = True
             self._last_release = now
@@ -140,8 +140,8 @@ class Button:
         _ : Timer
             Throwaway parameter required by `Timer.init`, equal to the timer object.
         """
-        self._multi_click_count = self._multi_click_helper
-        self._multi_click_helper = 0
+        self._multi_click_final = self._multi_click_count
+        self._multi_click_count = 0
 
     # Public API
     def is_pressed(self) -> bool:
@@ -193,6 +193,13 @@ class Button:
             return True
         return False
     
+    def clear_events(self) -> None:
+        """
+        Resets the pressed and released events and both multi-click counters.
+        """
+        self._pressed_event = self._released_event = False
+        self._multi_click_final = self._multi_click_final = 0
+
     @property
     def hold_time(self) -> int:
         """
@@ -211,6 +218,28 @@ class Button:
     
     @property
     def multi_click_count(self) -> int:
-        count = self._multi_click_count
-        self._multi_click_count = 0
+        """
+        Number of times the button's been pressed in a row
+
+        Returns
+        -------
+        int
+            Number of times the button's been pressed with less than
+            `multi_click_timeout` milliseconds between presses in a row.
+        """
+        return self._multi_click_count
+
+    @property
+    def multi_click_final(self) -> int:
+        """
+        Number of times the button was pressed in a row
+        after the pressing streak ended.
+
+        Returns
+        -------
+        int
+            Number of times the button was pressed 
+        """
+        count = self._multi_click_final
+        self._multi_click_final = 0
         return count
