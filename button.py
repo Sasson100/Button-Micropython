@@ -62,12 +62,12 @@ class Button:
         pull = pull.lower()
         if pull not in ("up","down"):
             raise ValueError("pull must be either up or down")
-        elif pull == "up":
-            pull_val = Pin.PULL_UP
-            self._active_on = False
-        else:
+        elif pin_id<0 or pull == "down":
             pull_val = Pin.PULL_DOWN
             self._active_on = True
+        else:
+            pull_val = Pin.PULL_UP
+            self._active_on = False
         
         self._pin = Pin(pin_id, Pin.IN, pull_val)
         self._pin.irq(
