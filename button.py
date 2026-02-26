@@ -20,32 +20,40 @@ class Button:
         ):
         """
         Initialize a debounced GPIO button.
-        Default parameters are set for an active-low button,
-        so if yours isn't then remember to change them ig
+
+        This class is designed for active-low buttons by default. Adjust `pull` 
+        if your button has a different electrical configuration.
 
         Parameters
         ----------
         pin_id : int
             GPIO pin number connected to the button.
         debounce_ms : int, optional
-            Debounce interval in milliseconds. State changes occurring within
-            this window are ignored. Default is 30.
+            Debounce interval in milliseconds. State changes occurring within this 
+            window are ignored. Default is 30 ms.
         pull : {"up", "down"}, optional
-            Internal pull resistor configuration. Determines the electrical
-            idle state and active polarity of the button. Default is "up".
+            Internal pull resistor configuration:
+            - "up"   : idle state is HIGH, button press pulls LOW (default)
+            - "down" : idle state is LOW, button press pulls HIGH
         multi_click_timeout : int, optional
-            Maximum time interval in milliseconds between consecutive presses
-            to be considered part of the same multi-click sequence. Default is 200.
-        custom_callback : Callable[[bool],None] | None
-            A function that'll be run immediately after the normal interrupt ends,
-            requires a bool parameter for the state of the button. Default is None.
+            Maximum interval in milliseconds between consecutive presses to be 
+            considered part of the same multi-click sequence. Default is 200 ms.
+        custom_callback : Callable[[bool], None] or None, optional
+            Function called after each button state change. Receives a single 
+            boolean argument indicating the new button state. Default is None.
 
         Raises
         ------
         ValueError
-            If `pull` is not one of {"up", "down"}.
+            If `pull` is not "up" or "down".
         ValueError
-            If `custom_callback` isn't either `None` or `Callable`
+            If `custom_callback` is not a callable or None.
+
+        Notes
+        -----
+        - The `custom_callback` function is subject to MicroPython interrupt callback 
+        restrictions. See: https://docs.micropython.org/en/latest/reference/isr_rules.html
+        - All timing parameters (debounce, multi-click) are in milliseconds.
         """
         
         now = time.ticks_ms()
@@ -117,7 +125,7 @@ class Button:
         self._state = new_state
         self._last_change = now
 
-        if self._state:
+        if new_state:
             self._pressed_event = True
             self._last_press = now
 
@@ -211,7 +219,7 @@ class Button:
             Time in milliseconds that the button has been continuously pressed.
             Returns 0 if the button is not currently pressed.
         """
-        if not self.is_pressed:
+        if not self.is_pressed():
             return 0
         
         return time.ticks_diff(time.ticks_ms(),self._last_press)
