@@ -61,8 +61,8 @@ class Button:
             pull_val = Pin.PULL_DOWN
             self._active_on = True
         
-        self.pin = Pin(pin_id, Pin.IN, pull_val)
-        self.pin.irq(
+        self._pin = Pin(pin_id, Pin.IN, pull_val)
+        self._pin.irq(
             trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING,
             handler=self._irq_handler
         )
@@ -97,7 +97,7 @@ class Button:
         -----
         The returned value accounts for the configured pull direction.
         """
-        value = self.pin.value()
+        value = self._pin.value()
         return value == self._active_on
 
     def _irq_handler(self,_: Pin):
