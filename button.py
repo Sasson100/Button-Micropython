@@ -88,7 +88,7 @@ class Button:
 
         self._multi_click_timeout = multi_click_timeout
         self._multi_click_final = self._multi_click_count = 0
-        self._multi_click_timer = Timer(-1)
+        self._multi_click_timer = Timer(0)
 
         micropython.alloc_emergency_exception_buf(100)
     
