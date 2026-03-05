@@ -1,4 +1,3 @@
 {
-    "urls": [["lib/button.py","button.py"]],
-    "version": "1.0"
+    "urls": [["button.py","button.py"]]
 }
